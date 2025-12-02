@@ -3,6 +3,7 @@
 import React from 'react';
 import { CheckCircle, XCircle, RotateCcw, Timer } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Footer from './Footer';
 
 interface ShuffledOption {
     text: string;
@@ -163,6 +164,9 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                     </motion.button>
                 </div>
             </div>
+
+            {/* Footer */}
+            <Footer />
         </div>
     );
 };

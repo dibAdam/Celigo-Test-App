@@ -3,6 +3,7 @@
 import React from 'react';
 import { Timer, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Footer from './Footer';
 
 interface ShuffledOption {
     text: string;
@@ -182,6 +183,9 @@ export const QuestionScreen: React.FC<QuestionScreenProps> = ({
                         </motion.p>
                     )}
                 </motion.div>
+
+                {/* Footer */}
+                <Footer />
             </div>
         </div>
     );
