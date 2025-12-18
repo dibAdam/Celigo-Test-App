@@ -1385,7 +1385,7 @@ export const allQuestions: Question[] = [
             "A lookup cannot be the last step of a flow.",
             "Results mapping is used to merge data from a lookup with data from an export."
         ],
-        correct: [3]
+        correct: [2, 3]
     },
     {
         question: "What flow elements can you reach using the Playground Integration explorer? (Select all that apply)",
@@ -1480,7 +1480,7 @@ export const allQuestions: Question[] = [
             "Connection configurations",
             "Request parameters"
         ],
-        correct: [0, 1, 2, 3]
+        correct: [0, 1]
     },
     {
         question: "In Mapper 2.0, instead of Multi-field Mapping, you'll see:",
