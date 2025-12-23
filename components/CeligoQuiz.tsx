@@ -26,17 +26,123 @@ const CeligoQuiz = () => {
     const [quizQuestions, setQuizQuestions] = useState<ShuffledQuestion[]>([]);
     const [questionsPerQuiz] = useState(60);
     const [timeElapsed, setTimeElapsed] = useState(0);
+    const [isTabVisible, setIsTabVisible] = useState(true);
+    const [isBlackedOut, setIsBlackedOut] = useState(false);
 
-    // Timer effect
+    // Use ref for immediate key tracking (state updates are async)
+    const pressedKeysRef = React.useRef<Set<string>>(new Set());
+
+    // Page Visibility API - detect when tab loses focus
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            setIsTabVisible(!document.hidden);
+
+            if (document.hidden) {
+                console.log('Tab lost focus - timer paused');
+                // Black out screen when tab loses focus
+                setIsBlackedOut(true);
+                setTimeout(() => setIsBlackedOut(false), 2000);
+            } else {
+                console.log('Tab gained focus - timer resumed');
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
+    // Detect keyboard combinations
+    useEffect(() => {
+        if (!quizStarted || quizCompleted) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Add key to ref for immediate tracking
+            pressedKeysRef.current.add(e.key);
+
+            // Detect if 2 or more keys are pressed simultaneously
+            if (pressedKeysRef.current.size >= 2) {
+                e.preventDefault();
+                setIsBlackedOut(true);
+                navigator.clipboard.writeText('');
+                console.log('Multiple keys detected:', Array.from(pressedKeysRef.current).join(' + '));
+
+                // Show warning
+                setTimeout(() => {
+                    alert('Keyboard shortcuts are disabled during the quiz to maintain content integrity.');
+                    setIsBlackedOut(false);
+                }, 1000);
+            }
+
+            console.log('Keys pressed:', Array.from(pressedKeysRef.current));
+
+            // Specifically block common screenshot combinations FIRST
+            if (
+                e.key === 'PrintScreen' ||
+                (e.key === 's' && e.shiftKey && (e.metaKey || e.ctrlKey)) || // Win + Shift + S
+                ((e.key === '3' || e.key === '4' || e.key === '5') && e.shiftKey && e.metaKey) || // Mac screenshots
+                (e.key === 'p' && e.ctrlKey) || // Ctrl + P (print)
+                (e.key === 's' && e.ctrlKey) // Ctrl + S (save)
+            ) {
+                e.preventDefault();
+                setIsBlackedOut(true);
+                navigator.clipboard.writeText('');
+
+                setTimeout(() => {
+                    alert('This action is disabled during the quiz to maintain content integrity.');
+                    setIsBlackedOut(false);
+                }, 1000);
+                return;
+            }
+        };
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            // Remove key from ref
+            pressedKeysRef.current.delete(e.key);
+            console.log('Keys still pressed:', Array.from(pressedKeysRef.current));
+        };
+
+        // Prevent right-click context menu
+        const preventContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            setIsBlackedOut(true);
+            setTimeout(() => {
+                alert('Right-click is disabled during the quiz to maintain content integrity.');
+                setIsBlackedOut(false);
+            }, 500);
+        };
+
+        // Detect when window loses focus (might indicate screenshot tool)
+        const handleBlur = () => {
+            setIsBlackedOut(true);
+            setTimeout(() => setIsBlackedOut(false), 1000);
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        document.addEventListener('contextmenu', preventContextMenu);
+        window.addEventListener('blur', handleBlur);
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keyup', handleKeyUp);
+            document.removeEventListener('contextmenu', preventContextMenu);
+            window.removeEventListener('blur', handleBlur);
+        };
+    }, [quizStarted, quizCompleted]);
+
+    // Timer effect - only runs when tab is visible
     useEffect(() => {
         let timer: NodeJS.Timeout;
-        if (quizStarted && !quizCompleted) {
+        if (quizStarted && !quizCompleted && isTabVisible) {
             timer = setInterval(() => {
                 setTimeElapsed(prev => prev + 1);
             }, 1000);
         }
         return () => clearInterval(timer);
-    }, [quizStarted, quizCompleted]);
+    }, [quizStarted, quizCompleted, isTabVisible]);
 
     // Format time helper
     const formatTime = (seconds: number) => {
@@ -158,46 +264,74 @@ const CeligoQuiz = () => {
 
     // Render appropriate screen
     return (
-        <AnimatePresence mode="wait">
-            {!quizStarted ? (
-                <StartScreen
-                    key="start"
-                    questionsPerQuiz={questionsPerQuiz}
-                    onStart={startQuiz}
-                />
-            ) : quizCompleted ? (
-                <ResultScreen
-                    key="result"
-                    score={calculateScore()}
-                    totalQuestions={quizQuestions.length}
-                    percentage={((calculateScore() / quizQuestions.length) * 100).toFixed(1)}
-                    passed={parseFloat(((calculateScore() / quizQuestions.length) * 100).toFixed(1)) >= 80}
-                    timeElapsed={timeElapsed}
-                    quizQuestions={quizQuestions}
-                    selectedAnswers={selectedAnswers}
-                    onReset={resetQuiz}
-                    formatTime={formatTime}
-                />
-            ) : (
-                <QuestionScreen
-                    key={`question-${currentQuestionIndex}`}
-                    currentQuestionIndex={currentQuestionIndex}
-                    totalQuestions={quizQuestions.length}
-                    answeredCount={Object.keys(selectedAnswers).length}
-                    timeElapsed={timeElapsed}
-                    question={quizQuestions[currentQuestionIndex].question}
-                    options={quizQuestions[currentQuestionIndex].options}
-                    selectedOptions={selectedAnswers[currentQuestionIndex] || []}
-                    isMultiSelect={Array.isArray(quizQuestions[currentQuestionIndex].correct)}
-                    onAnswerSelect={handleAnswerSelect}
-                    onPrevious={handlePrevious}
-                    onNext={handleNext}
-                    onSubmit={handleSubmit}
-                    allQuestionsAnswered={Object.keys(selectedAnswers).length === quizQuestions.length}
-                    formatTime={formatTime}
-                />
+        <div className="screenshot-protected relative">
+            {/* Black overlay when suspicious activity detected */}
+            {isBlackedOut && (
+                <div className="fixed inset-0 bg-black z-[9999] flex items-center justify-center">
+                    <div className="text-white text-2xl font-bold">
+                        ⚠️ Screenshot Detection Active
+                    </div>
+                </div>
             )}
-        </AnimatePresence>
+
+            <AnimatePresence mode="wait">
+                {!quizStarted ? (
+                    <StartScreen
+                        key="start"
+                        questionsPerQuiz={questionsPerQuiz}
+                        onStart={startQuiz}
+                    />
+                ) : quizCompleted ? (
+                    <ResultScreen
+                        key="result"
+                        score={calculateScore()}
+                        totalQuestions={quizQuestions.length}
+                        percentage={((calculateScore() / quizQuestions.length) * 100).toFixed(1)}
+                        passed={parseFloat(((calculateScore() / quizQuestions.length) * 100).toFixed(1)) >= 80}
+                        timeElapsed={timeElapsed}
+                        quizQuestions={quizQuestions}
+                        selectedAnswers={selectedAnswers}
+                        onReset={resetQuiz}
+                        formatTime={formatTime}
+                    />
+                ) : (
+                    <QuestionScreen
+                        key={`question-${currentQuestionIndex}`}
+                        currentQuestionIndex={currentQuestionIndex}
+                        totalQuestions={quizQuestions.length}
+                        answeredCount={Object.keys(selectedAnswers).length}
+                        timeElapsed={timeElapsed}
+                        question={quizQuestions[currentQuestionIndex].question}
+                        options={quizQuestions[currentQuestionIndex].options}
+                        selectedOptions={selectedAnswers[currentQuestionIndex] || []}
+                        isMultiSelect={Array.isArray(quizQuestions[currentQuestionIndex].correct)}
+                        onAnswerSelect={handleAnswerSelect}
+                        onPrevious={handlePrevious}
+                        onNext={handleNext}
+                        onSubmit={handleSubmit}
+                        allQuestionsAnswered={Object.keys(selectedAnswers).length === quizQuestions.length}
+                        formatTime={formatTime}
+                    />
+                )}
+            </AnimatePresence>
+
+            <style jsx>{`
+                .screenshot-protected {
+                    -webkit-touch-callout: none;
+                    -webkit-user-select: none;
+                    -khtml-user-select: none;
+                    -moz-user-select: none;
+                    -ms-user-select: none;
+                    user-select: none;
+                }
+                
+                @media print {
+                    .screenshot-protected * {
+                        display: none !important;
+                    }
+                }
+            `}</style>
+        </div>
     );
 };
 
